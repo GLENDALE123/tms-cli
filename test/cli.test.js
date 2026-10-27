@@ -10,6 +10,19 @@ import { join } from 'node:path';
 const cli = fileURLToPath(new URL('../bin/tms.js', import.meta.url));
 const run = (directory, ...args) => promisify(execFile)(process.execPath, [cli, ...args], { env: { ...process.env, TMS_CLI_STATE_DIRECTORY: directory, TMS_CLI_DISABLE_NETWORK: '1' } });
 
+test('에이전트가 서버 연결 없이 명령별 JSON 예시와 생산시간 안내를 찾는다', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tms-cli-help-'));
+  try {
+    const help = await run(directory, 'query', '--help');
+    assert.match(help.stdout, /"source":"production-schedules"/);
+    assert.match(help.stdout, /ConvertTo-Json/);
+    assert.match((await run(directory, 'plan', '--help')).stdout, /"steps"/);
+    const guide = await run(directory, 'guide');
+    assert.match(guide.stdout, /startTime/);
+    assert.match(guide.stdout, /inputQuantity/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('권한 경계를 우회하는 예전 직접 조회 명령은 인증 전에 중단', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tms-cli-guard-'));
   try {

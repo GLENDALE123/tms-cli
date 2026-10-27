@@ -2,6 +2,12 @@
 
 The independent service is deployed for a limited rollout. Indexed search requires `tms retrieve capabilities` to succeed; the index is not yet ready. Direct field queries may be available independently: check `tms catalog` and `query.available`. Employee and partner access depends on verified policies and rollout status. Do not fall back to raw Firebase, Storage URLs, credentials, or disabled legacy commands to bypass an authorization failure.
 
+## CLI discovery and production-time evidence
+
+Run `tms query --help` for a complete JSON example and `tms catalog` for available fields. On PowerShell use `ConvertTo-Json -Depth 8 -Compress | tms query`, or use `tms query --json` with a correctly quoted JSON argument. `tms plan --help` describes the multi-query format. If `tms retrieve capabilities` says the index is not ready, use bounded field queries if authorized; it is the retrieval server, not a Firebase 503.
+
+For active production, use `packaging-reports`: `workDate` and `productionLine` locate a report; `startTime` with no `endTime` is evidence of work in progress, not proof of live operation. The `status` field can be manually maintained and may disagree with times. Inspect inputQuantity, goodQuantity, defectQuantity, lineRatio, productionPerMinute, uph, startTime, endTime, supplier, product, part and specification. Match these with past reports; verify quantities and units, avoid summing unrelated orders or treating an order quantity as the daily input. For completed reports with valid start/end and positive input quantity, historical throughput can be estimated as inputQuantity divided by elapsed time, allowing for overnight if documented and disclosing unknown breaks. An estimate for a proposed input requires a verified start time, an appropriate rate and a break/overtime assumption; report uncertainty and do not treat planned status as live telemetry. Paginate and state omissions.
+
 ## Intent and retrieval
 
 Call `tms catalog` to discover business sources, field meanings, relationships and cautions before planning unfamiliar queries. It is manually maintained, not an exhaustive or automatically updated picture of the live database. Confirm uncertain links against evidence, and do not assume historical packaging is the current instruction. The catalog works only after the reviewed service is deployed.

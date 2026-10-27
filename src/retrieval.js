@@ -36,7 +36,7 @@ export async function retrieve(token, query, options) {
 
 export function validateStructuredQuery(query) {
   const keys = new Set(['source', 'filters', 'order', 'limit', 'cursor']);
-  if (!query || typeof query !== 'object' || Array.isArray(query) || Object.keys(query).some(key => !keys.has(key)) || typeof query.source !== 'string' || !query.source || !Array.isArray(query.filters) || !query.filters.length || Buffer.byteLength(JSON.stringify(query), 'utf8') > 16384) throw new Error('조건이 있는 업무별 쿼리 JSON이 필요합니다.');
+  if (!query || typeof query !== 'object' || Array.isArray(query) || Object.keys(query).some(key => !keys.has(key)) || typeof query.source !== 'string' || !query.source || !Array.isArray(query.filters) || !query.filters.length || Buffer.byteLength(JSON.stringify(query), 'utf8') > 16384) throw new Error('조건이 있는 업무별 쿼리 JSON이 필요합니다. tms query --help에서 예시를 확인하세요.');
   return query;
 }
 

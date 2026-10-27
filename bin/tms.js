@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { login } from '../src/login.js';
 import { loadSession, clearSession } from '../src/credentials.js';
 import { currentToken } from '../src/session.js';
@@ -14,6 +15,9 @@ const help = `TMS CLI — 에이전트용 읽기 전용 검색
   tms logout
   tms notice                    # 서비스 종료 안내 다시 보기
   tms catalog                   # 업무 자료와 필드·연결 기준 확인
+  tms guide                     # 에이전트용 조회 안내
+  tms query --help              # 필드 조회 JSON 예시
+  tms plan --help               # 다단계 조회 JSON 예시
   tms retrieve capabilities
   tms retrieve                  # 표준 입력의 검색 JSON을 서비스로 전달
   tms query                     # 표준 입력의 필드 조건 JSON을 서비스로 전달
@@ -28,6 +32,11 @@ const help = `TMS CLI — 에이전트용 읽기 전용 검색
 사용자는 자연어로 질문하고 에이전트가 검색 조건을 구성합니다.
 자료 범위와 사용자 권한은 tms catalog에서 확인하세요.`;
 
+const queryHelp = `tms query: 조건 필수. stdin으로 JSON을 보내거나 --json 다음에 JSON 문자열을 전달하세요.
+예: {"source":"production-schedules","filters":[{"field":"planDate","op":"eq","value":"2026-10-27"}],"limit":20}
+PowerShell: @{source='production-schedules';filters=@(@{field='planDate';op='eq';value='2026-10-27'});limit=20} | ConvertTo-Json -Depth 8 -Compress | tms query
+필드와 사용자 범위는 tms catalog에서 확인하세요. 날짜는 질문의 실제 날짜로 바꾸세요.`;
+const planHelp = `tms plan: stdin 또는 --json으로 {"steps":[{"id":"schedule","query":{"source":"production-schedules","filters":[{"field":"planDate","op":"eq","value":"2026-10-27"}],"limit":20}}]} 형식 전달. tms guide와 catalog에서 관계와 제한을 확인하세요.`;
 function output(value) { process.stdout.write(`${value}\n`); }
 function print(value) { output(JSON.stringify(value, null, 2)); }
 function imageOptions(args) {
@@ -53,12 +62,20 @@ async function readQueryStdin(validate = validateRetrievalQuery) {
   return validate(query);
 }
 
+function parseArgumentQuery(value, validate) {
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 16384) throw new Error('검색 JSON을 확인하세요.');
+  let data; try { data = JSON.parse(value); } catch { throw new Error('검색 요청은 JSON 형식이어야 합니다.'); }
+  return validate(data);
+}
+
 async function main(args) {
   const [group, action, ...rest] = args;
   if (group === 'notice' && !action) { output(serviceNotice); return; }
   await showFirstRunNotice();
   if (!group || ['--help', '-h', 'help'].includes(group)) { output(help); return; }
-  if (group === '--version') { output('0.1.0'); return; }
+  if (group === '--version') { output('0.2.1'); return; }
+  if (group === 'guide' && !action) { output(await readFile(new URL('../AGENT_GUIDE.md', import.meta.url), 'utf8')); return; }
+  if (['query', 'plan'].includes(group) && ['--help', '-h'].includes(action) && !rest.length) { output(group === 'query' ? queryHelp : planHelp); return; }
   if (group === 'login' && !action) { const session = await login(); output(`${session.email} 로그인 완료`); return; }
   if (group === 'logout' && !action) { await clearSession(); output('이 기기의 로그인 정보를 삭제했습니다.'); return; }
   if (group === 'whoami' && !action) {
@@ -86,14 +103,14 @@ async function main(args) {
     const query = await readQueryStdin();
     print(await retrieve(await currentToken(), query)); return;
   }
-  if (group === 'query' && !action) {
+  if (group === 'query' && (!action || action === '--json' && rest.length === 1)) {
     retrievalEndpoint();
-    const query = await readQueryStdin(validateStructuredQuery);
+    const query = action ? parseArgumentQuery(rest[0], validateStructuredQuery) : await readQueryStdin(validateStructuredQuery);
     print(await structuredQuery(await currentToken(), query)); return;
   }
-  if (group === 'plan' && !action) {
+  if (group === 'plan' && (!action || action === '--json' && rest.length === 1)) {
     retrievalEndpoint();
-    const plan = await readQueryStdin(validatePlan);
+    const plan = action ? parseArgumentQuery(rest[0], validatePlan) : await readQueryStdin(validatePlan);
     print(await executePlan(await currentToken(), plan)); return;
   }
   if (group === 'retrieve' && action === 'capabilities' && !rest.length) {

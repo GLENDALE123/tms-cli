@@ -1,6 +1,6 @@
 {
   "name": "@hs-jig/tms-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only Firebase CLI for TMS",
   "type": "module",
   "bin": {
