@@ -10,12 +10,17 @@ TMS 서비스는 **2026년 12월 31일 종료 예정**입니다. 새 데이터 �
 
 GitHub에 공개된 패키지는 GitHub 계정 없이 Node.js 20 이상에서 실행할 수 있습니다.
 
+전역 설치를 권장합니다. GitHub 계정은 필요하지 않습니다.
+
 ```powershell
-npx -y github:GLENDALE123/tms-cli login
-npx -y github:GLENDALE123/tms-cli catalog
+npm install --global https://github.com/GLENDALE123/tms-cli/archive/refs/heads/main.tar.gz
+tms login
+tms catalog
 ```
 
-각 명령을 반복할 때는 위의 `npx -y github:GLENDALE123/tms-cli` 뒤에 아래의 `tms` 명령 부분을 붙입니다. 로컬에 전역 설치했다면 `tms`를 직접 사용할 수 있습니다.
+업데이트할 때도 같은 `npm install --global` 명령을 다시 실행하세요. 설치 후 `tms`를 찾지 못하면 터미널을 다시 열고 npm 전역 실행 경로가 PATH에 있는지 확인하세요.
+
+설치 없이 한 번 실행하려면 `npx -y github:GLENDALE123/tms-cli catalog`를 사용할 수 있습니다.
 
 ```powershell
 tms login
