@@ -13,14 +13,14 @@ GitHub에 공개된 패키지는 GitHub 계정 없이 Node.js 20 이상에서 �
 전역 설치를 권장합니다. GitHub 계정은 필요하지 않습니다.
 
 ```powershell
-npm install --global https://github.com/GLENDALE123/tms-cli/archive/refs/heads/main.tar.gz
+npm install --global @hs-jig/tms-cli
 tms login
 tms catalog
 ```
 
 업데이트할 때도 같은 `npm install --global` 명령을 다시 실행하세요. 설치 후 `tms`를 찾지 못하면 터미널을 다시 열고 npm 전역 실행 경로가 PATH에 있는지 확인하세요.
 
-설치 없이 한 번 실행하려면 `npx -y github:GLENDALE123/tms-cli catalog`를 사용할 수 있습니다.
+설치 없이 한 번 실행하려면 `npx -y @hs-jig/tms-cli catalog`를 사용할 수 있습니다.
 
 ```powershell
 tms login
