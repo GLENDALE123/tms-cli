@@ -1,0 +1,11 @@
+{
+  "name": "@mir1102/tms-cli",
+  "version": "0.1.0",
+  "description": "Read-only Firebase CLI for TMS",
+  "type": "module",
+  "bin": { "tms": "./bin/tms.js" },
+  "files": ["bin", "src/browser.js", "src/config.js", "src/credentials.js", "src/criteria.js", "src/http.js", "src/login.js", "src/notice.js", "src/retrieval.js", "src/session.js", "src/state.js", "README.md", "AGENT_GUIDE.md"],
+  "engines": { "node": ">=20" },
+  "dependencies": { "@napi-rs/keyring": "2.1.2" },
+  "scripts": { "postinstall": "node ./bin/install-notice.js", "test": "node --test" }
+}

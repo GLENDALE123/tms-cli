@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const cli = fileURLToPath(new URL('../bin/tms.js', import.meta.url));
+const run = (directory, ...args) => promisify(execFile)(process.execPath, [cli, ...args], { env: { ...process.env, TMS_CLI_STATE_DIRECTORY: directory, TMS_CLI_DISABLE_NETWORK: '1' } });
+
+test('권한 경계를 우회하는 예전 직접 조회 명령은 인증 전에 중단', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tms-cli-guard-'));
+  try {
+    for (const args of [['firestore', 'query', 'users'], ['storage', 'list'], ['quality', 'images', '--order', 'T12345'], ['injection', 'inbound', '--date', '2026-10-27']]) {
+      await assert.rejects(run(directory, ...args), error => error.code === 1 && /직접 조회는 권한 검증 문제로 중단/.test(error.stderr));
+    }
+    await assert.rejects(run(directory, 'retrieve', 'capabilities'), error => error.code === 1 && /비활성화/.test(error.stderr));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('CLI는 첫 실행 안내와 로컬 기준 저장·재조회·안전한 실행 거부를 연결한다', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tms-cli-criteria-'));
+  const invoke = (args, input = '') => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cli, ...args], { env: { ...process.env, TMS_CLI_STATE_DIRECTORY: directory, TMS_CLI_DISABLE_NETWORK: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', reject); child.on('close', code => resolve({ code, stdout, stderr })); child.stdin.end(input);
+  });
+  try {
+    const template = { kind: 'query', request: { source: 'jig-requests', filters: [{ field: 'itemName', op: 'eq', value: { $param: 'name' } }], limit: 10 } };
+    const saved = await invoke(['criteria', 'save', 'my-jig'], JSON.stringify(template));
+    assert.equal(saved.code, 0);
+    assert.match(saved.stderr, /2026년 12월 31일/);
+    assert.deepEqual(JSON.parse(saved.stdout).parameters, ['name']);
+    const listed = await invoke(['criteria', 'list']);
+    assert.deepEqual(JSON.parse(listed.stdout).criteria, ['my-jig']);
+    assert.doesNotMatch(listed.stderr, /서비스 종료 안내/);
+    const shown = await invoke(['criteria', 'show', 'my-jig']);
+    assert.deepEqual(JSON.parse(shown.stdout).template, template);
+    const run = await invoke(['criteria', 'run', 'my-jig'], JSON.stringify({ name: '가상' }));
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /비활성화/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
