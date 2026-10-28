@@ -3,23 +3,53 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const cli = fileURLToPath(new URL('../bin/tms.js', import.meta.url));
 const run = (directory, ...args) => promisify(execFile)(process.execPath, [cli, ...args], { env: { ...process.env, TMS_CLI_STATE_DIRECTORY: directory, TMS_CLI_DISABLE_NETWORK: '1' } });
 
+test('이미 저장 경로가 있으면 로그인 저장소나 네트워크에 접근하기 전에 중단한다', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tms-cli-existing-'));
+  try {
+    const path = join(directory, 'existing.pdf');
+    await writeFile(path, 'keep');
+    for (const args of [['spec', '--id', 'fake', '--kind', 'product', '--output', path], ['image', '--inspection', 'fake', '--index', '1', '--output', path]]) {
+      await assert.rejects(run(directory, ...args), error => error.code === 1 && /파일이 이미/.test(error.stderr) && !/비활성화|로그인이 필요/.test(error.stderr));
+    }
+    assert.equal(await readFile(path, 'utf8'), 'keep');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('명령 진단 시간은 전체 명령을 측정하고 인수나 입력값은 기록하지 않는다', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tms-cli-timing-'));
+  try {
+    const result = await promisify(execFile)(process.execPath, [cli, 'query', '--help'], { env: { ...process.env, TMS_CLI_STATE_DIRECTORY: directory, TMS_CLI_DISABLE_NETWORK: '1', TMS_CLI_DIAGNOSTICS: '1' } });
+    const event = JSON.parse(result.stderr.trim().split('\n').at(-1));
+    assert.deepEqual(Object.keys(event).sort(), ['command', 'elapsedMs', 'event', 'success']);
+    assert.equal(event.event, 'tms.command');
+    assert.equal(event.command, 'query');
+    assert.equal(event.success, true);
+    assert.ok(Number.isInteger(event.elapsedMs) && event.elapsedMs >= 0);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('에이전트가 서버 연결 없이 명령별 JSON 예시와 생산시간 안내를 찾는다', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tms-cli-help-'));
   try {
     const help = await run(directory, 'query', '--help');
-    assert.match(help.stdout, /"source":"production-schedules"/);
+    assert.match(help.stdout, /"source":"coating-schedule"/);
     assert.match(help.stdout, /ConvertTo-Json/);
     assert.match((await run(directory, 'plan', '--help')).stdout, /"steps"/);
+    assert.match((await run(directory, 'image', '--help')).stdout, /--inspection/);
     const guide = await run(directory, 'guide');
     assert.match(guide.stdout, /startTime/);
     assert.match(guide.stdout, /inputQuantity/);
+    assert.match(guide.stdout, /Scheduled reports and recurring queries/);
+    assert.match(guide.stdout, /Windows Task Scheduler, macOS launchd, or Linux cron/);
+    assert.match(guide.stdout, /Do not put passwords, Firebase tokens/);
+    assert.match((await run(directory, '--help')).stdout, /예약 보고나 정기 조회/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -29,7 +59,10 @@ test('권한 경계를 우회하는 예전 직접 조회 명령은 인증 전에
     for (const args of [['firestore', 'query', 'users'], ['storage', 'list'], ['quality', 'images', '--order', 'T12345'], ['injection', 'inbound', '--date', '2026-10-27']]) {
       await assert.rejects(run(directory, ...args), error => error.code === 1 && /직접 조회는 권한 검증 문제로 중단/.test(error.stderr));
     }
-    await assert.rejects(run(directory, 'retrieve', 'capabilities'), error => error.code === 1 && /비활성화/.test(error.stderr));
+    await assert.rejects(run(directory, 'retrieve', 'capabilities'), error => error.code === 1 && /색인 검색이 제거/.test(error.stderr));
+    const imageArgs = ['--inspection', 'synthetic', '--index', '1', '--output', 'image.png'];
+    await assert.rejects(run(directory, 'image', ...imageArgs), error => error.code === 1 && /비활성화/.test(error.stderr));
+    await assert.rejects(run(directory, 'retrieve', 'image', ...imageArgs), error => error.code === 1 && /비활성화/.test(error.stderr));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
