@@ -35,7 +35,7 @@
   },
   "scripts": {
     "postinstall": "node ./bin/install-notice.js",
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1",
     "prepublishOnly": "npm test"
   }
 }

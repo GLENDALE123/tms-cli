@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { login } from '../src/login.js';
 
 test('브라우저 로그인은 loopback, origin과 일회성 상태를 검증한 후 저장', async () => {
-  let saved;
+  let saved, browser;
   const result = await login({
     timeoutMs: 5000,
     save: async session => { saved = session; },
     launch: url => {
-      void (async () => {
+      browser = (async () => {
         const address = new URL(url);
         const state = address.hash.slice(1);
         const base = address.origin;
@@ -20,9 +20,10 @@ test('브라우저 로그인은 loopback, origin과 일회성 상태를 검증�
         assert.equal(saved, undefined);
         assert.equal((await fetch(base)).status, 200);
         assert.equal((await request(base, payload)).status, 200);
-      })().catch(error => { throw error; });
+      })();
     },
   });
+  await browser;
   assert.deepEqual(result, { uid: 'abc', email: 'test@example.com' });
   assert.equal(saved.refreshToken, 'private');
 });
