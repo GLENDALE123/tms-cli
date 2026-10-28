@@ -75,6 +75,14 @@ For a bounded candidate query for items in progress, check the catalog's example
 
 ## Intent and retrieval
 
+### 사출재고가 보이지 않을 때: 입고·출고 이력 대조
+
+TMS 사출재고 탭에서 **재고 0 숨김**이 켜져 있으면, 한 번 입고됐다가 반출되어 잔량이 0인 품목도 목록에 보이지 않을 수 있습니다. 화면이나 사출재고 조회에서 보이지 않는다는 이유만으로 "입고되지 않았다"고 답하지 마세요. 숨김 설정이 실제로 켜져 있는지 확인하지 못했다면 켜져 있다고 단정하지도 마세요.
+
+입고관리 탭에 해당하는 **입고와 출고 기록을 함께 확인**하세요. CLI에서는 `tms catalog --source injection-inbound`와 `tms catalog --source injection-outbound`로 허용된 필드와 권한 범위를 확인하고, 발주번호를 우선으로 제품·부속·업체를 대조하여 같은 품목의 기록을 좁게 조회합니다. 필요한 날짜 범위와 반환 필드를 지정하고, 기간을 제한했다면 그 범위 밖의 이력은 확인하지 않았다고 밝히세요. 전체 페이지 데이터를 받아오거나 관련 없는 품목을 섞지 마세요.
+
+입고일·입고수량과 출고일·출고수량, 반품·취소·삭제 상태를 근거로 **입고 후 반출**, **입고 기록은 있으나 현재 잔량 미확인**, **조회 범위 내 입고 기록 없음**을 구분하세요. 재고 원본 행이나 단순 입고−출고 계산만으로 현재고를 확정하지 말고, 필요하면 권한이 허용하는 재고 변동·실사 기록도 대조하세요. 권한 거부·조회 실패·페이지 잘림은 기록 없음이 아닙니다. 입고 기록이 조회되지 않아도 "미입고 확정"이라고 단정하지 말고 확인한 범위와 빠진 근거를 명시하세요.
+
 Call `tms catalog` to discover business sources, field meanings, relationships and cautions before planning unfamiliar queries. Business meanings and relationships are reviewed manually; field structures are generated from app types, and neither is an exhaustive live schema. Confirm uncertain links against evidence, and do not assume historical packaging is the current instruction. The catalog works only after the reviewed service is deployed.
 
 You may create a reusable local criterion with `tms criteria save NAME`, sending `{"kind":"query","request":...}` or `{"kind":"plan","request":...}` as JSON on stdin. Replace a changing value with `{"$param":"name"}`. Use `tms criteria show NAME` to inspect its parameters and send an object with those values to `tms criteria run NAME`. The saved file contains only local query instructions, not a grant of access; the server still validates every source, field, row, user and limit at execution. Local criteria are not automatically shared with other people or devices. Never store passwords, access tokens or secrets in a criterion.
