@@ -4,15 +4,15 @@ function firebaseErrorMessage(code) {
     case 'INVALID_LOGIN_CREDENTIALS':
     case 'INVALID_PASSWORD':
     case 'EMAIL_NOT_FOUND':
-      return 'Firebase에서 이메일 또는 비밀번호를 확인하지 못했습니다. 기존 TMS 앱에 로그인하는 이메일인지 확인해 주세요.';
-    case 'USER_DISABLED': return 'Firebase에서 비활성화된 계정입니다. 관리자에게 문의해 주세요.';
+      return 'TMS 이메일 또는 비밀번호를 확인하지 못했습니다. 평소 TMS 앱에 로그인하는 이메일인지 확인해 주세요.';
+    case 'USER_DISABLED': return '비활성화된 TMS 계정입니다. 관리자에게 문의해 주세요.';
     case 'TOO_MANY_ATTEMPTS_TRY_LATER': return '로그인 시도가 일시적으로 제한됐습니다. 잠시 후 다시 시도해 주세요.';
     case 'OPERATION_NOT_ALLOWED':
     case 'PASSWORD_LOGIN_DISABLED': return '이 Firebase 프로젝트에서 이메일·비밀번호 로그인이 허용되지 않았습니다.';
     case 'API_KEY_HTTP_REFERRER_BLOCKED':
     case 'API_KEY_SERVICE_BLOCKED':
     case 'API_KEY_INVALID': return 'Firebase API 키의 사용 제한 또는 설정을 확인해야 합니다.';
-    default: return 'Firebase 로그인 요청을 처리하지 못했습니다. 네트워크와 계정 인증 설정을 확인해 주세요.';
+    default: return 'TMS 로그인 요청을 처리하지 못했습니다. 네트워크와 계정 인증 설정을 확인해 주세요.';
   }
 }
 document.querySelector('form').addEventListener('submit', async (event) => {
@@ -32,7 +32,7 @@ document.querySelector('form').addEventListener('submit', async (event) => {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email: form.elements.namedItem('email').value.trim(), password, returnSecureToken: true }),
       });
-    } catch { throw new Error('Firebase 서버에 연결하지 못했습니다. 네트워크와 브라우저 연결을 확인해 주세요.'); }
+    } catch { throw new Error('TMS 인증 서버에 연결하지 못했습니다. 네트워크와 브라우저 연결을 확인해 주세요.'); }
     const data = await response.json();
     if (data.mfaPendingCredential) throw new Error('이 계정에는 추가 인증이 필요합니다. 현재 CLI는 이 인증 방식을 지원하지 않습니다.');
     if (!response.ok || !data.refreshToken || !data.localId) throw new Error(firebaseErrorMessage(data.error?.message));

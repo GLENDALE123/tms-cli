@@ -1,6 +1,6 @@
 {
   "name": "@hs-jig/tms-cli",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Read-only Firebase CLI for TMS",
   "type": "module",
   "bin": {
@@ -10,6 +10,10 @@
     "bin",
     "src/browser.js",
     "src/agent.js",
+    "src/auth-source.js",
+    "src/doctor.js",
+    "src/device-login.js",
+    "src/session-store.js",
     "src/connect-retry.js",
     "src/tls-connect.js",
     "src/transport.js",

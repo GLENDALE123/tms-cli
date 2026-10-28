@@ -6,6 +6,8 @@ function serviceName(url) {
   if (host.endsWith('.cloudfunctions.net')) return 'functions';
   return 'other';
 }
+const problem = (message, code, status) =>
+  Object.assign(new Error(message), { code, ...(status ? { status } : {}) });
 
 export async function request(url, options = {}) {
   const diagnostics = process.env.TMS_CLI_DIAGNOSTICS === '1';
@@ -18,7 +20,12 @@ export async function request(url, options = {}) {
   const started = diagnostics ? performance.now() : 0;
   let response;
   const { retryConnect = false, ...fetchOptions } = options;
-  const settings = { ...fetchOptions, redirect: 'error', signal: AbortSignal.timeout(30000) };
+  const timeout = AbortSignal.timeout(30000);
+  const settings = {
+    ...fetchOptions,
+    redirect: 'error',
+    signal: fetchOptions.signal ? AbortSignal.any([fetchOptions.signal, timeout]) : timeout,
+  };
   try {
     if (retryConnect) {
       const { fetchReadOnly } = await import('./connect-retry.js');
@@ -38,7 +45,10 @@ export async function request(url, options = {}) {
       process.stderr.write(
         `${JSON.stringify({ event: 'tms.request', service: serviceName(url), method: options.method || 'GET', headersMs: Math.round(performance.now() - started), status: null, success: false })}\n`,
       );
-    throw new Error(`${serviceLabel}에 연결하지 못했습니다. 네트워크를 확인하세요.`);
+    throw problem(
+      `${serviceLabel}에 연결하지 못했습니다. 네트워크를 확인하세요.`,
+      'TMS_NETWORK_UNAVAILABLE',
+    );
   }
   if (diagnostics)
     process.stderr.write(
@@ -46,12 +56,18 @@ export async function request(url, options = {}) {
     );
   if (!response.ok) {
     if (response.status === 401)
-      throw new Error('인증이 만료되었거나 비활성화되었습니다. tms login으로 다시 로그인하세요.');
+      throw problem(
+        '인증이 만료되었거나 비활성화되었습니다. tms login으로 다시 로그인하세요.',
+        'TMS_AUTH_REJECTED',
+        401,
+      );
     if (response.status === 403)
-      throw new Error(
+      throw problem(
         serviceLabel === '검색 서버'
           ? '접근이 거부되었습니다. TMS 계정 권한과 조회 범위를 확인하세요.'
           : '접근이 거부되었습니다. Firebase 보안 규칙과 조회 조건을 확인하세요.',
+        'TMS_ACCESS_DENIED',
+        403,
       );
     if (response.status === 404)
       throw new Error('문서 또는 파일을 찾을 수 없거나 접근할 수 없습니다.');

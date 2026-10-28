@@ -3,11 +3,11 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { config } from './config.js';
-import { saveSession } from './credentials.js';
+import { saveSession } from './session-store.js';
 
 const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>TMS CLI 로그인</title></head><body data-api-key="${config.apiKey}"><main><h1>TMS CLI 로그인</h1><p>기존 TMS 이메일과 비밀번호를 입력하세요.</p><form><p><label>이메일 <input name="email" type="email" autocomplete="username" required></label></p><p><label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label></p><button type="submit">로그인</button></form><p id="status" role="status"></p></main><script src="/browser.js" defer></script></body></html>`;
 
-function openBrowser(url) {
+export function openBrowser(url) {
   const commands = process.platform === 'win32' ? ['rundll32.exe', ['url.dll,FileProtocolHandler', url]]
     : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
   const child = spawn(commands[0], commands[1], { stdio: 'ignore', detached: true });

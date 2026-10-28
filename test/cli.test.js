@@ -22,6 +22,17 @@ test('이미 저장 경로가 있으면 로그인 저장소나 네트워크에 �
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test('헤드리스 진단은 비밀값 없는 JSON으로 실패하며 주입 인증에서 일반 로그인·로그아웃을 혼용하지 않는다', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tms-cli-auth-source-'));
+  const invoke = args => promisify(execFile)(process.execPath, [cli, ...args], { env: { ...process.env, TMS_CLI_STATE_DIRECTORY: directory, TMS_CLI_DISABLE_NETWORK: '1', TMS_ID_TOKEN: 'SYNTHETIC_PRIVATE_TOKEN', TMS_ID_TOKEN_FILE: undefined } });
+  try {
+    await assert.rejects(invoke(['doctor']), error => { const report = JSON.parse(error.stdout); return error.code === 1 && report.auth.code === 'TMS_ID_TOKEN_INVALID' && !error.stdout.includes('SYNTHETIC_PRIVATE_TOKEN') && !error.stderr.includes('SYNTHETIC_PRIVATE_TOKEN'); });
+    for (const action of ['login', 'logout']) await assert.rejects(invoke([action]), error => error.code === 1 && /주입 인증/.test(error.stderr) && !error.stderr.includes('SYNTHETIC_PRIVATE_TOKEN'));
+    await assert.rejects(invoke(['auth', 'export', '--stdout']), error => error.code === 1 && /비활성화/.test(error.stderr) && !error.stdout.includes('SYNTHETIC_PRIVATE_TOKEN'));
+    assert.match((await run(directory, 'doctor', '--help')).stdout, /--online/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('명령 진단 시간은 전체 명령을 측정하고 인수나 입력값은 기록하지 않는다', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tms-cli-timing-'));
   try {

@@ -2,16 +2,20 @@
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { login } from '../src/login.js';
-import { loadSession, clearSession } from '../src/credentials.js';
+import { loadSession, clearSession, sessionStoreKind, useLocalFile } from '../src/session-store.js';
 import { currentToken } from '../src/session.js';
 import { retrievalCatalog, retrievalEndpoint, retrieveImage, retrieveSpec, assertNewDownloadPath, validateStructuredQuery, structuredQuery, validatePlan, executePlan } from '../src/retrieval.js';
 import { createCriteriaStore, bindCriteria } from '../src/criteria.js';
 import { serviceNotice, showFirstRunNotice } from '../src/notice.js';
 import { updateCli } from '../src/update.js';
+import { authSourceName, inspectIdToken } from '../src/auth-source.js';
 
 const help = `TMS CLI — 에이전트용 읽기 전용 검색
 
   tms login
+  tms login --device            # 다른 기기의 브라우저 로그인 후 이 환경에 저장
+  tms doctor                    # 런타임·인증 소스·로그인 상태를 로컬 점검
+  tms doctor --online           # 실제 검색 서비스 접근까지 확인
   tms whoami
   tms logout
   tms update                    # 전역 설치된 CLI를 최신 버전으로 갱신
@@ -31,6 +35,7 @@ const help = `TMS CLI — 에이전트용 읽기 전용 검색
   tms criteria remove 이름      # 이 기기의 조회 기준 삭제
   tms image --inspection 검사ID --index 번호 --output 파일경로
   tms spec --id 발주문서ID --kind product|film --output 파일경로
+  tms auth export --stdout       # 승인된 보안 파이프로 단기 ID 토큰 전달
 
 사용자는 자연어로 질문하고 에이전트가 검색 조건을 구성합니다.
 자료 범위와 사용자 권한은 tms catalog에서 확인하세요.
@@ -88,6 +93,19 @@ async function main(args) {
   await showFirstRunNotice();
   if (!group || ['--help', '-h', 'help'].includes(group)) { output(help); return; }
   if (group === '--version') { const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')); output(pkg.version); return; }
+  if (group === 'doctor' && ['--help', '-h'].includes(action) && !rest.length) { output('tms doctor [--online]: Node·인증 소스·키링/주입 토큰·서비스 설정을 JSON으로 점검합니다. --online만 실제 서비스 인증을 확인합니다. 비밀번호·토큰·업무 데이터는 출력하지 않습니다.'); return; }
+  if (group === 'doctor' && (!action || action === '--online') && !rest.length) {
+    const { diagnose } = await import('../src/doctor.js');
+    const report = await diagnose({ online: action === '--online' });
+    print(report); if (!(action === '--online' ? report.ready : report.localReady)) process.exitCode = 1; return;
+  }
+  if (group === 'auth' && action === 'export' && rest.length === 1 && rest[0] === '--stdout') {
+    if (process.stdout.isTTY) throw new Error('ID 토큰은 터미널·채팅에 표시하지 말고 승인된 보안 입력으로 직접 파이프하세요.');
+    retrievalEndpoint();
+    const token = await currentToken(); inspectIdToken(token);
+    await retrievalCatalog(token); output(token); return;
+  }
+  if (group === 'auth') throw new Error('단기 ID 토큰 전달은 tms auth export --stdout을 승인된 보안 입력과 직접 연결하세요. 일반 진단 도구나 채팅에서 실행하지 마세요.');
   if (group === 'update' && ['--help', '-h'].includes(action) && !rest.length) { output('tms update: npm으로 @hs-jig/tms-cli 전역 설치를 최신 공개 버전으로 갱신합니다.'); return; }
   if (group === 'update' && !action) { output('TMS CLI를 최신 공개 버전으로 갱신합니다.'); await updateCli(); output('업데이트 완료. tms --version으로 버전을 확인하세요.'); return; }
   if (group === 'guide' && !action) { output(await readFile(new URL('../AGENT_GUIDE.md', import.meta.url), 'utf8')); return; }
@@ -96,12 +114,27 @@ async function main(args) {
   if (['query', 'plan'].includes(group) && ['--help', '-h'].includes(action) && !rest.length) { output(group === 'query' ? queryHelp : planHelp); return; }
   if (group === 'image' && ['--help', '-h'].includes(action) && !rest.length) { output('tms image --inspection 검사ID --index 번호 --output 파일경로'); return; }
   if (group === 'spec' && ['--help', '-h'].includes(action) && !rest.length) { output('tms spec --id 발주문서ID --kind product|film --output 파일경로'); return; }
-  if (group === 'login' && !action) { const session = await login(); output(`${session.email} 로그인 완료`); return; }
-  if (group === 'logout' && !action) { await clearSession(); output('이 기기의 로그인 정보를 삭제했습니다.'); return; }
+  if (group === 'login' && ['--help', '-h'].includes(action) && !rest.length) { output('tms login [--device] [--no-browser]: 일반 PC는 로컬 브라우저, 원격·헤드리스는 공개 로그인 링크를 사용합니다. 받은 세션은 실행 환경에 저장해 재사용하며 토큰은 출력하지 않습니다.'); return; }
+  if (group === 'login' && [action, ...rest].filter(Boolean).every(value => ['--device', '--no-browser'].includes(value)) && new Set([action, ...rest].filter(Boolean)).size === [action, ...rest].filter(Boolean).length) {
+    if (authSourceName() !== 'os-keyring') throw new Error('주입 인증이 설정돼 있습니다. TMS_ID_TOKEN / TMS_ID_TOKEN_FILE을 해제한 뒤 일반 로그인을 실행하세요.');
+    const flags = [action, ...rest], noBrowser = flags.includes('--no-browser');
+    let device = flags.includes('--device') || process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
+    try { await loadSession(); } catch (error) {
+      if (error?.code === 'TMS_KEYRING_UNAVAILABLE' && process.platform !== 'win32') { await useLocalFile(); device = true; process.stderr.write('OS 보안 저장소가 없어 이 환경의 사용자 전용 로컬 세션 파일에 토큰을 저장합니다.\n'); }
+      else if (error?.code !== 'TMS_KEYRING_INVALID_SESSION') throw error;
+    }
+    const session = device ? await (await import('../src/device-login.js')).deviceLogin({ ...(noBrowser ? { launch: () => {} } : {}) }) : await login({ ...(noBrowser ? { launch: () => {} } : {}) });
+    output(`${session.email} 로그인 완료 (${await sessionStoreKind()})`); return;
+  }
+  if (group === 'logout' && !action) {
+    if (authSourceName() !== 'os-keyring') throw new Error('외부 주입 인증은 이 명령으로 지울 수 없습니다. 실행 환경의 토큰 변수 또는 비밀 파일 주입을 해제하세요. 기존 OS 로그인은 변경하지 않았습니다.');
+    await clearSession(); output('이 기기의 로그인 정보를 삭제했습니다.'); return;
+  }
   if (group === 'whoami' && !action) {
-    const session = await loadSession();
-    if (!session) throw new Error('로그인이 필요합니다. tms login을 실행하세요.');
-    await currentToken(); print({ email: session.email, uid: session.uid }); return;
+    retrievalEndpoint();
+    const token = await currentToken(), session = inspectIdToken(token);
+    await retrievalCatalog(token);
+    print({ email: session.email, uid: session.uid, source: authSourceName() === 'os-keyring' ? await sessionStoreKind() : authSourceName(), verifiedBy: 'retrieval-service' }); return;
   }
   if (group === 'criteria') {
     const store = createCriteriaStore();
@@ -151,7 +184,7 @@ async function main(args) {
 const commandStarted = performance.now();
 main(process.argv.slice(2)).catch(error => { console.error(`오류: ${error.message}`); process.exitCode = 1; }).finally(() => {
   if (process.env.TMS_CLI_DIAGNOSTICS === '1') {
-    const command = process.argv[2], known = new Set(['login', 'logout', 'whoami', 'catalog', 'query', 'plan', 'image', 'spec', 'criteria', 'update', 'guide', 'notice','agent']);
+    const command = process.argv[2], known = new Set(['login', 'logout', 'whoami', 'doctor', 'auth', 'catalog', 'query', 'plan', 'image', 'spec', 'criteria', 'update', 'guide', 'notice','agent']);
     process.stderr.write(`${JSON.stringify({ event: 'tms.command', command: known.has(command) ? command : 'other', elapsedMs: Math.round(performance.now() - commandStarted), success: !process.exitCode })}\n`);
   }
 });

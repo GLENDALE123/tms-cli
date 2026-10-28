@@ -1,32 +1,46 @@
 import { config } from './config.js';
-import { loadSession, saveSession } from './credentials.js';
+import { loadSession, saveSession } from './session-store.js';
 import { request } from './http.js';
+import { readExternalSession } from './auth-source.js';
 const changedSession = () =>
   Object.assign(new Error('갱신 중 로그인 정보가 변경되었습니다.'), {
     code: 'TMS_SESSION_CHANGED',
   });
+
+export function reusableIdToken(session, time) {
+  return typeof session?.idToken === 'string' &&
+    session.idToken &&
+    Number.isFinite(session.idTokenIssuedAt) &&
+    Number.isFinite(session.idTokenExpiresAt) &&
+    session.idTokenExpiresAt - session.idTokenIssuedAt <= 3600000 &&
+    time >= session.idTokenIssuedAt &&
+    time < session.idTokenExpiresAt - 60000
+    ? session.idToken
+    : null;
+}
 
 export function createTokenProvider({
   load = loadSession,
   save = saveSession,
   send = request,
   now = Date.now,
+  external = readExternalSession,
 } = {}) {
   let pending = null;
   async function token() {
+    const injected = await external();
+    if (injected) return injected.idToken;
     const session = await load();
-    if (!session) throw new Error('로그인이 필요합니다. tms login을 실행하세요.');
+    if (!session)
+      throw Object.assign(
+        new Error(
+          '로그인이 필요합니다. 일반 PC는 tms login, 원격·헤드리스는 tms login --device로 TMS 계정에 로그인하세요. tms doctor로 상태를 확인하세요.',
+        ),
+        { code: 'TMS_LOGIN_REQUIRED' },
+      );
     const time = now();
-    if (
-      typeof session.idToken === 'string' &&
-      session.idToken &&
-      Number.isFinite(session.idTokenIssuedAt) &&
-      Number.isFinite(session.idTokenExpiresAt) &&
-      session.idTokenExpiresAt - session.idTokenIssuedAt <= 3600000 &&
-      time >= session.idTokenIssuedAt &&
-      time < session.idTokenExpiresAt - 60000
-    )
-      return session.idToken;
+    const cached = reusableIdToken(session, time);
+    if (cached) return cached;
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: session.refreshToken,

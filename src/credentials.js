@@ -21,7 +21,12 @@ export function createSessionStore(getEntry = entry) {
       value = (await getEntry(account)).getPassword();
     } catch (error) {
       if (missing(error)) return null;
-      throw new Error('운영체제 보안 저장소를 읽을 수 없습니다.');
+      throw Object.assign(
+        new Error(
+          '운영체제 보안 저장소를 읽을 수 없습니다. 원격·헤드리스 환경에서는 tms login --device로 TMS 계정에 로그인하세요. tms doctor로 상태를 확인하세요.',
+        ),
+        { code: 'TMS_KEYRING_UNAVAILABLE' },
+      );
     }
     if (!value) return null;
     try {
@@ -35,7 +40,10 @@ export function createSessionStore(getEntry = entry) {
         throw new Error();
       return s;
     } catch {
-      throw new Error('저장된 로그인 정보가 올바르지 않습니다. tms login으로 다시 로그인하세요.');
+      throw Object.assign(
+        new Error('저장된 로그인 정보가 올바르지 않습니다. tms login으로 다시 로그인하세요.'),
+        { code: 'TMS_KEYRING_INVALID_SESSION' },
+      );
     }
   }
   async function loadSession() {
